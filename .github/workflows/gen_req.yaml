@@ -10,7 +10,7 @@ jobs:
 
         with:
           PROJECT_PATH: ./
-          REQUIREMENT_PATH: {{ github.workspace }}
+          REQUIREMENT_PATH: ./{{ github.workspace }}
           COMMIT_MESSAGE: "Updated requirements file"
       - uses: actions/upload-artifact@v4
         with:
