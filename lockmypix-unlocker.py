@@ -1,431 +1,544 @@
+
 import sys
 import os
-import logging
-import binascii
 import hashlib
+import binascii
+import threading
+import time
 from pathlib import Path
+from datetime import datetime
+import logging
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QLineEdit, QMessageBox,
-    QProgressBar, QTextEdit, QFrame, QInputDialog
-)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QPushButton, QFileDialog, 
+                             QTextEdit, QProgressBar, QLineEdit, QMessageBox,
+                             QGroupBox, QSpacerItem, QSizePolicy)
+from PyQt6.QtCore import QThread, pyqtSignal, QTimer, Qt
+from PyQt6.QtGui import QFont, QIcon, QPalette, QColor
 
-# -------------------------------------------------------------
-# A LockMyPix referencia kód (decrypt.py) 3 RÉSZE FELHASZNÁLVA:
-# - extension_map
-# - test_password
-# - write_to_output
-# Forrás: c-sleuth/lock-my-pix-android-decrypt/decrypt.py
-# -------------------------------------------------------------
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
-# this is likely not a full list of the extensions possible
-extension_map = {
-    ".vp3": ".mp4",
-    ".vo1": ".webm",
-    ".v27": ".mpg",
-    ".vb9": ".avi",
-    ".v77": ".mov",
-    ".v78": ".wmv",
-    ".v82": ".dv",
-    ".vz9": ".divx",
-    ".vi3": ".ogv",
-    ".v1u": ".h261",
-    ".v6m": ".h264",
-    ".6zu": ".jpg",
-    ".tr7": ".gif",
-    ".p5o": ".png",
-    ".8ur": ".bmp",
-    ".33t": ".tiff",  # this extension could also be .tif
-    ".20i": ".webp",
-    ".v93": ".heic",
-    ".v91": ".flv",  # this key is linked to .flv and .eps
-    ".v80": ".3gpp",
-    ".vo4": ".ts",
-    ".v99": ".mkv",
-    ".vr2": ".mpeg",
-    ".vv3": ".dpg",
-    ".v81": ".rmvb",
-    ".vz8": ".vob",
-    ".wi2": ".asf",
-    ".vi4": ".h263",
-    ".v2u": ".f4v",
-    ".v76": ".m4v",
-    ".v75": ".ram",
-    ".v74": ".rm",
-    ".v3u": ".mts",
-    ".v92": ".dng",
-    ".r89": ".ps",
-    ".v79": ".3gp",
-}
-
-def test_password(input_dir, password):
-    for file in os.listdir(input_dir):
-        if file.endswith(".6zu"):
-            key = hashlib.sha1(password.encode()).digest()[:16]
-            iv = key
-            counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
-            cipher = AES.new(key, AES.MODE_CTR, counter=counter)
-            encrypted_path = os.path.join(input_dir, os.fsdecode(file))
-            with open(encrypted_path, "rb+") as enc_data:
-                dec_data = cipher.decrypt(enc_data.read(16))
-                header = binascii.hexlify(dec_data).decode("utf8")
-                if header.startswith("ffd8ff"):
-                    return True
-                else:
-                    logging.warning(f"{password} appears to be incorrect")
-                    return False
-    else:
-        logging.warning("Cannot find a jpg file to test password")
-        # A referencia kódban itt interaktív y/n kérdés van; GUI-ban False-szal jelezzük,
-        # hogy a jelszót nem tudtuk ellenőrizni (nincs .6zu tesztelhető fájl).
-        return False
-
-def write_to_output(output_dir, filename, dec_data):
-    basename, ext = os.path.splitext(filename)
-    if extension_map.get(ext):
-        filename += extension_map.get(ext)
-    else:
-        filename += ".unknown"
-        logging.warning(f"File {filename} has an unknown extension")
-    if not Path(output_dir).exists():
-        logging.info(f"Creating output directory: {output_dir}")
-        os.mkdir(output_dir)
-    with open(os.path.join(output_dir, filename), "wb") as f:
-        f.write(dec_data)
-    logging.info(f"Decrypted file {filename} written to {output_dir}")
-# -------------------------------------------------------------
-# VÉGE: referencia kód felhasznált részek
-# -------------------------------------------------------------
-
-LOG_FILE = "LockMyPix_decryption_log.log"
-
-class QTextEditLogger(logging.Handler):
-    def __init__(self, widget: QTextEdit):
-        super().__init__()
-        self.widget = widget
-
-    def emit(self, record):
-        msg = self.format(record)
-        self.widget.append(msg)
-
-def setup_logging(log_widget: QTextEdit | None = None):
-    logger = logging.getLogger("lmpx_gui")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-
-    fh = logging.FileHandler(LOG_FILE, encoding="utf-8", mode="w")
-    fmt = logging.Formatter('[%(levelname)s] %(asctime)s %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
-    fh.setFormatter(fmt)
-    logger.addHandler(fh)
-
-    if log_widget is not None:
-        gui_handler = QTextEditLogger(log_widget)
-        gui_handler.setFormatter(fmt)
-        logger.addHandler(gui_handler)
-
-    logger.info("Alkalmazás elindult")
-    return logger
-
-class DecryptThread(QThread):
-    progress = pyqtSignal(int)
-    status = pyqtSignal(str)
+class DecryptWorker(QThread):
+    """Munkaszál a dekriptáláshoz"""
+    progress_updated = pyqtSignal(int)
+    status_updated = pyqtSignal(str)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, input_dir: str, output_dir: str, password: str):
+    def __init__(self, password, input_dir, output_dir):
         super().__init__()
+        self.password = password
         self.input_dir = input_dir
         self.output_dir = output_dir
-        self.password = password
-        self._running = True
+        self.should_stop = False
+
+        # Extension mapping ugyanaz mint az eredeti kódban
+        self.extension_map = {
+            ".vp3": ".mp4", ".vo1": ".webm", ".v27": ".mpg", ".vb9": ".avi",
+            ".v77": ".mov", ".v78": ".wmv", ".v82": ".dv", ".vz9": ".divx",
+            ".vi3": ".ogv", ".v1u": ".h261", ".v6m": ".h264", ".6zu": ".jpg",
+            ".tr7": ".gif", ".p5o": ".png", ".8ur": ".bmp", ".33t": ".tiff",
+            ".20i": ".webp", ".v93": ".heic", ".v91": ".flv", ".v80": ".3gpp",
+            ".vo4": ".ts", ".v99": ".mkv", ".vr2": ".mpeg", ".vv3": ".dpg",
+            ".v81": ".rmvb", ".vz8": ".vob", ".wi2": ".asf", ".vi4": ".h263",
+            ".v2u": ".f4v", ".v76": ".m4v", ".v75": ".ram", ".v74": ".rm",
+            ".v3u": ".mts", ".v92": ".dng", ".r89": ".ps", ".v79": ".3gp",
+        }
+
+    def test_password(self):
+        """Jelszó tesztelése egy .6zu fájlon"""
+        try:
+            for file in os.listdir(self.input_dir):
+                if file.endswith(".6zu"):
+                    key = hashlib.sha1(self.password.encode()).digest()[:16]
+                    iv = key
+                    counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
+                    cipher = AES.new(key, AES.MODE_CTR, counter=counter)
+                    encrypted_path = os.path.join(self.input_dir, file)
+
+                    with open(encrypted_path, "rb") as enc_data:
+                        dec_data = cipher.decrypt(enc_data.read(16))
+                        header = binascii.hexlify(dec_data).decode("utf8")
+                        if header.startswith("ffd8ff"):
+                            return True
+                        else:
+                            return False
+            return False
+        except Exception as e:
+            self.status_updated.emit(f"Hiba a jelszó tesztelésében: {str(e)}")
+            return False
 
     def stop(self):
-        self._running = False
+        """Megszakítás jelzése"""
+        self.should_stop = True
 
     def run(self):
+        """Fő dekriptálási folyamat"""
         try:
-            logger = logging.getLogger("lmpx_gui")
-            self.status.emit("Jelszó ellenőrzése...")
-            self.progress.emit(5)
-
-            ok = test_password(self.input_dir, self.password)
-            if not ok:
-                self.finished.emit(False, "Hibás jelszó vagy nem található tesztelhető .6zu fájl.")
+            # Jelszó tesztelése
+            self.status_updated.emit("Jelszó tesztelése...")
+            if not self.test_password():
+                self.finished.emit(False, "Helytelen jelszó!")
                 return
 
-            files = [f for f in os.listdir(self.input_dir) if f.lower().endswith(".6zu")]
-            total = len(files)
-            if total == 0:
-                self.finished.emit(False, "A bemeneti mappában nincs .6zu fájl.")
+            self.status_updated.emit("Jelszó helyes, dekriptálás kezdése...")
+
+            # Kulcs generálása
+            key = hashlib.sha1(self.password.encode()).digest()[:16]
+            iv = key
+
+            # Kimeneti mappa létrehozása ha nem létezik
+            if not Path(self.output_dir).exists():
+                os.makedirs(self.output_dir)
+                self.status_updated.emit(f"Kimeneti mappa létrehozva: {self.output_dir}")
+
+            # Fájlok listázása
+            files = [f for f in os.listdir(self.input_dir) if os.path.isfile(os.path.join(self.input_dir, f))]
+            total_files = len(files)
+
+            if total_files == 0:
+                self.finished.emit(False, "Nincsenek feldolgozható fájlok a bemeneti mappában!")
                 return
 
-            Path(self.output_dir).mkdir(parents=True, exist_ok=True)
+            processed_files = 0
+            successful_files = 0
 
-            processed = 0
-            self.status.emit("Dekódolás folyamatban...")
-            for name in files:
-                if not self._running:
-                    self.finished.emit(False, "Művelet megszakítva.")
+            for file in files:
+                if self.should_stop:
+                    self.status_updated.emit("Műveletek megszakítva!")
+                    self.finished.emit(False, "Művelet megszakítva a felhasználó által")
                     return
 
-                in_path = os.path.join(self.input_dir, name)
-                with open(in_path, "rb") as enc:
-                    enc_data = enc.read()
+                try:
+                    encrypted_path = os.path.join(self.input_dir, file)
+                    self.status_updated.emit(f"Feldolgozás: {file}")
 
-                key = hashlib.sha1(self.password.encode()).digest()[:16]
-                iv = key
-                counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
-                cipher = AES.new(key, AES.MODE_CTR, counter=counter)
-                dec_data = cipher.decrypt(enc_data)
+                    # Új cipher objektum minden fájlhoz
+                    counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
+                    cipher = AES.new(key, AES.MODE_CTR, counter=counter)
 
-                write_to_output(self.output_dir, name, dec_data)
+                    with open(encrypted_path, "rb") as enc_data:
+                        dec_data = cipher.decrypt(enc_data.read())
 
-                processed += 1
-                pct = 5 + int(95 * (processed / total))
-                self.progress.emit(pct)
+                        # Fájlnév és kiterjesztés kezelése
+                        basename, ext = os.path.splitext(file)
+                        if ext in self.extension_map:
+                            new_filename = basename + self.extension_map[ext]
+                        else:
+                            new_filename = file + ".unknown"
 
-            self.status.emit("Kész")
-            self.finished.emit(True, f"Sikeres dekódolás. {processed} fájl feldolgozva.")
+                        output_path = os.path.join(self.output_dir, new_filename)
+
+                        with open(output_path, "wb") as output_file:
+                            output_file.write(dec_data)
+
+                        successful_files += 1
+                        self.status_updated.emit(f"Sikeresen dekriptálva: {new_filename}")
+
+                except Exception as e:
+                    self.status_updated.emit(f"Hiba a fájl feldolgozásakor {file}: {str(e)}")
+
+                processed_files += 1
+                progress = int((processed_files / total_files) * 100)
+                self.progress_updated.emit(progress)
+
+            self.finished.emit(True, f"Dekriptálás befejezve! {successful_files}/{total_files} fájl sikeresen dekriptálva.")
+
         except Exception as e:
-            logging.getLogger("lmpx_gui").exception("Hiba történt")
-            self.finished.emit(False, f"Hiba történt: {e}")
+            self.finished.emit(False, f"Kritikus hiba: {str(e)}")
 
-class MainWindow(QMainWindow):
+
+class LockMyPixDecryptor(QMainWindow):
+    """Fő alkalmazás ablak"""
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("6zu AES Dekódoló – Modern")
-        self.setMinimumSize(800, 560)
+        self.worker = None
+        self.log_file = None
+        self.setup_logging()
+        self.init_ui()
 
-        self.input_dir: str | None = None
-        self.output_dir: str | None = None
-        self.worker: DecryptThread | None = None
+    def setup_logging(self):
+        """Naplózás beállítása"""
+        log_dir = "logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
 
-        self._build_ui()
-        self.logger = setup_logging(self.log_view)
-        self._apply_style()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file = os.path.join(log_dir, f"decrypt_log_{timestamp}.log")
 
-    def _build_ui(self):
-        cw = QWidget()
-        self.setCentralWidget(cw)
-        root = QVBoxLayout(cw)
-        root.setContentsMargins(26, 26, 26, 26)
-        root.setSpacing(16)
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(self.log_file, encoding='utf-8'),
+                logging.StreamHandler()
+            ]
+        )
 
-        title = QLabel("6zu AES Dekódoló")
-        f = QFont()
-        f.setPointSize(18)
-        f.setBold(True)
-        title.setFont(f)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(title)
+    def init_ui(self):
+        """Felhasználói felület inicializálása"""
+        self.setWindowTitle("LockMyPix Dekriptor v1.0")
+        self.setGeometry(300, 300, 800, 600)
+        self.setStyleSheet(self.get_modern_style())
 
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
-        root.addWidget(line)
+        # Központi widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
 
-        in_group = QFrame()
-        ig = QVBoxLayout(in_group)
-        lbl_in = QLabel("📁 Bemeneti mappa (.6zu fájlokkal)")
-        lbl_in.setFont(QFont("", 10, QFont.Weight.Bold))
-        ig.addWidget(lbl_in)
-        ih = QHBoxLayout()
-        self.in_label = QLabel("Nincs mappa kiválasztva…")
-        self.in_label.setStyleSheet("color:#666; font-style:italic;")
-        self.btn_in = QPushButton("Tallózás…")
-        self.btn_in.clicked.connect(self._choose_input_dir)
-        ih.addWidget(self.in_label, 1)
-        ih.addWidget(self.btn_in)
-        ig.addLayout(ih)
-        root.addWidget(in_group)
+        # Fő layout
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(30, 30, 30, 30)
 
-        out_group = QFrame()
-        og = QVBoxLayout(out_group)
-        lbl_out = QLabel("📂 Kimeneti mappa (alapértelmezés: bemeneti/unlocked)")
-        lbl_out.setFont(QFont("", 10, QFont.Weight.Bold))
-        og.addWidget(lbl_out)
-        oh = QHBoxLayout()
-        self.out_label = QLabel("Nincs mappa kiválasztva…")
-        self.out_label.setStyleSheet("color:#666; font-style:italic;")
-        self.btn_out = QPushButton("Mappa választás…")
-        self.btn_out.clicked.connect(self._choose_output_dir)
-        oh.addWidget(self.out_label, 1)
-        oh.addWidget(self.btn_out)
-        og.addLayout(oh)
-        root.addWidget(out_group)
+        # Cím
+        title_label = QLabel("🔓 LockMyPix Fájl Dekriptor")
+        title_label.setFont(QFont("Arial", 24, QFont.Weight.Bold))
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setStyleSheet("color: #2c3e50; margin-bottom: 20px;")
+        main_layout.addWidget(title_label)
 
-        btns = QFrame()
-        bh = QHBoxLayout(btns)
-        self.btn_start = QPushButton("🚀 Indít")
-        self.btn_start.setEnabled(False)
-        self.btn_start.clicked.connect(self._start)
-        self.btn_stop = QPushButton("⏹ Leállít")
-        self.btn_stop.setEnabled(False)
-        self.btn_stop.clicked.connect(self._stop)
-        self.btn_log = QPushButton("📜 Napló megnyitása")
-        self.btn_log.clicked.connect(self._open_log)
-        bh.addWidget(self.btn_start)
-        bh.addWidget(self.btn_stop)
-        bh.addStretch()
-        bh.addWidget(self.btn_log)
-        root.addWidget(btns)
+        # Fájl műveletek csoport
+        file_group = QGroupBox("📁 Mappa beállítások")
+        file_layout = QVBoxLayout(file_group)
 
-        prog = QFrame()
-        pg = QVBoxLayout(prog)
-        self.status_label = QLabel("Készen áll…")
-        self.progress = QProgressBar()
-        self.progress.setValue(0)
-        pg.addWidget(self.status_label)
-        pg.addWidget(self.progress)
-        root.addWidget(prog)
+        # Bemeneti mappa
+        input_layout = QHBoxLayout()
+        input_label = QLabel("Bemeneti mappa (.6zu fájlok):")
+        input_label.setMinimumWidth(200)
+        self.input_path_edit = QLineEdit()
+        self.input_path_edit.setPlaceholderText("Válasszon mappát a titkosított fájlokkal...")
+        self.input_browse_btn = QPushButton("📂 Tallózás")
+        self.input_browse_btn.clicked.connect(self.browse_input_folder)
 
-        log_group = QFrame()
-        lg = QVBoxLayout(log_group)
-        ltitle = QLabel("Működési napló")
-        ltitle.setFont(QFont("", 10, QFont.Weight.Bold))
-        self.log_view = QTextEdit()
-        self.log_view.setReadOnly(True)
-        self.log_view.setMaximumHeight(180)
-        lg.addWidget(ltitle)
-        lg.addWidget(self.log_view)
-        root.addWidget(log_group)
+        input_layout.addWidget(input_label)
+        input_layout.addWidget(self.input_path_edit)
+        input_layout.addWidget(self.input_browse_btn)
+        file_layout.addLayout(input_layout)
 
-    def _apply_style(self):
-        self.setStyleSheet("""
-            QMainWindow { background-color: #f5f5f7; }
-            QFrame {
-                background: #fff;
-                border: 1px solid #e5e7eb;
-                border-radius: 10px;
-                padding: 14px;
-            }
+        # Kimeneti mappa
+        output_layout = QHBoxLayout()
+        output_label = QLabel("Kimeneti mappa:")
+        output_label.setMinimumWidth(200)
+        self.output_path_edit = QLineEdit()
+        self.output_path_edit.setPlaceholderText("Dekriptált fájlok mentési helye...")
+        self.output_browse_btn = QPushButton("📂 Tallózás")
+        self.output_browse_btn.clicked.connect(self.browse_output_folder)
+
+        output_layout.addWidget(output_label)
+        output_layout.addWidget(self.output_path_edit)
+        output_layout.addWidget(self.output_browse_btn)
+        file_layout.addLayout(output_layout)
+
+        main_layout.addWidget(file_group)
+
+        # Vezérlő gombok csoport
+        control_group = QGroupBox("🎛️ Vezérlés")
+        control_layout = QHBoxLayout(control_group)
+
+        self.start_btn = QPushButton("▶️ Indítás")
+        self.start_btn.clicked.connect(self.start_decryption)
+        self.start_btn.setMinimumHeight(50)
+        self.start_btn.setStyleSheet("""
             QPushButton {
-                background-color: #2563eb;
+                background-color: #27ae60;
                 color: white;
+                font-size: 16px;
+                font-weight: bold;
                 border: none;
-                padding: 10px 18px;
                 border-radius: 8px;
-                font-weight: 600;
             }
-            QPushButton:hover { background-color: #1d4ed8; }
-            QPushButton:disabled { background-color: #cbd5e1; color:#64748b; }
-            QProgressBar {
-                border: 1px solid #e5e7eb;
-                border-radius: 8px;
-                background: #f8fafc;
-                height: 18px;
-                text-align: center;
+            QPushButton:hover {
+                background-color: #229954;
             }
-            QProgressBar::chunk { background-color: #10b981; border-radius: 6px; }
-            QTextEdit {
-                border: 1px solid #e5e7eb;
-                border-radius: 8px;
-                background: #fafafa;
-                font-family: Consolas, monospace;
+            QPushButton:disabled {
+                background-color: #95a5a6;
             }
         """)
 
-    def _choose_input_dir(self):
-        path = QFileDialog.getExistingDirectory(self, "Bemeneti mappa kiválasztása", "")
-        if not path:
-            return
-        self.input_dir = path
-        self.in_label.setText(path)
-        self.in_label.setStyleSheet("color:#2563eb; font-weight:600;")
-        default_out = os.path.join(path, "unlocked")
-        self.output_dir = default_out
-        self.out_label.setText(default_out)
-        self.out_label.setStyleSheet("color:#2563eb;")
-        has_6zu = any(f.lower().endswith(".6zu") for f in os.listdir(path))
-        self.btn_start.setEnabled(has_6zu)
-        if not has_6zu:
-            QMessageBox.information(self, "Információ", "A mappában nem található .6zu fájl.")
-        logging.getLogger("lmpx_gui").info(f"Bemeneti mappa: {path}")
-        logging.getLogger("lmpx_gui").info(f"Alapértelmezett kimenet: {default_out}")
+        self.stop_btn = QPushButton("⏹️ Leállítás")
+        self.stop_btn.clicked.connect(self.stop_decryption)
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.setMinimumHeight(50)
+        self.stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+            QPushButton:disabled {
+                background-color: #95a5a6;
+            }
+        """)
 
-    def _choose_output_dir(self):
-        base = self.output_dir or (self.input_dir or "")
-        out = QFileDialog.getExistingDirectory(self, "Kimeneti mappa kiválasztása", base)
-        if not out:
-            return
-        self.output_dir = out
-        self.out_label.setText(out)
-        self.out_label.setStyleSheet("color:#2563eb;")
-        logging.getLogger("lmpx_gui").info(f"Kimeneti mappa: {out}")
+        self.log_btn = QPushButton("📋 Napló megnyitása")
+        self.log_btn.clicked.connect(self.open_log)
+        self.log_btn.setMinimumHeight(50)
+        self.log_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
 
-    def _start(self):
-        if not self.input_dir:
-            QMessageBox.warning(self, "Figyelem", "Nincs kiválasztva bemeneti mappa.")
-            return
-        if not self.output_dir:
-            QMessageBox.warning(self, "Figyelem", "Nincs kijelölt kimeneti mappa.")
+        control_layout.addWidget(self.start_btn)
+        control_layout.addWidget(self.stop_btn)
+        control_layout.addWidget(self.log_btn)
+        main_layout.addWidget(control_group)
+
+        # Haladás csoport
+        progress_group = QGroupBox("📊 Haladás")
+        progress_layout = QVBoxLayout(progress_group)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimumHeight(30)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                text-align: center;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background-color: #3498db;
+                border-radius: 6px;
+            }
+        """)
+        progress_layout.addWidget(self.progress_bar)
+
+        self.status_label = QLabel("Kész az indításra...")
+        self.status_label.setStyleSheet("font-size: 14px; color: #7f8c8d;")
+        progress_layout.addWidget(self.status_label)
+
+        main_layout.addWidget(progress_group)
+
+        # Napló terület csoport
+        log_group = QGroupBox("📝 Művelet napló")
+        log_layout = QVBoxLayout(log_group)
+
+        self.log_text = QTextEdit()
+        self.log_text.setMaximumHeight(150)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #2c3e50;
+                color: #ecf0f1;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                border: 1px solid #34495e;
+                border-radius: 4px;
+            }
+        """)
+        log_layout.addWidget(self.log_text)
+
+        main_layout.addWidget(log_group)
+
+        # Spacer hozzáadása
+        spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        main_layout.addItem(spacer)
+
+        logging.info("LockMyPix Dekriptor alkalmazás elindítva")
+        self.log_message("LockMyPix Dekriptor alkalmazás elindítva")
+
+    def get_modern_style(self):
+        """Modern stílus visszaadása"""
+        return """
+            QMainWindow {
+                background-color: #ecf0f1;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: white;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #2c3e50;
+                font-size: 14px;
+            }
+            QLineEdit {
+                padding: 8px;
+                border: 2px solid #bdc3c7;
+                border-radius: 4px;
+                font-size: 12px;
+                background-color: white;
+            }
+            QLineEdit:focus {
+                border-color: #3498db;
+            }
+            QPushButton {
+                background-color: #95a5a6;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #7f8c8d;
+            }
+            QLabel {
+                color: #2c3e50;
+                font-size: 12px;
+            }
+        """
+
+    def log_message(self, message):
+        """Üzenet hozzáadása a naplóhoz"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] {message}"
+        self.log_text.append(formatted_message)
+        logging.info(message)
+
+    def browse_input_folder(self):
+        """Bemeneti mappa kiválasztása"""
+        folder = QFileDialog.getExistingDirectory(self, "Válassza ki a bemeneti mappát")
+        if folder:
+            self.input_path_edit.setText(folder)
+            # Automatikus kimeneti mappa beállítása
+            unlocked_path = os.path.join(folder, "unlocked")
+            self.output_path_edit.setText(unlocked_path)
+            self.log_message(f"Bemeneti mappa kiválasztva: {folder}")
+
+    def browse_output_folder(self):
+        """Kimeneti mappa kiválasztása"""
+        folder = QFileDialog.getExistingDirectory(self, "Válassza ki a kimeneti mappát")
+        if folder:
+            self.output_path_edit.setText(folder)
+            self.log_message(f"Kimeneti mappa kiválasztva: {folder}")
+
+    def get_password(self):
+        """Jelszó bekérése"""
+        from PyQt6.QtWidgets import QInputDialog
+        password, ok = QInputDialog.getText(
+            self, 
+            "Jelszó szükséges", 
+            "Adja meg a LockMyPix alkalmazás jelszavát:",
+            QLineEdit.EchoMode.Password
+        )
+        if ok and password:
+            return password
+        return None
+
+    def start_decryption(self):
+        """Dekriptálás indítása"""
+        input_dir = self.input_path_edit.text().strip()
+        output_dir = self.output_path_edit.text().strip()
+
+        # Validálás
+        if not input_dir:
+            QMessageBox.warning(self, "Hiányzó adat", "Kérem válasszon bemeneti mappát!")
             return
 
-        try:
-            Path(self.output_dir).mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            QMessageBox.critical(self, "Hiba", f"Nem hozható létre a kimeneti mappa: {e}")
+        if not output_dir:
+            QMessageBox.warning(self, "Hiányzó adat", "Kérem válasszon kimeneti mappát!")
             return
 
-        password, ok = QInputDialog.getText(self, "🔑 Jelszó", "Add meg a jelszót:", QLineEdit.EchoMode.Password)
-        if not ok or not password:
+        if not os.path.exists(input_dir):
+            QMessageBox.critical(self, "Hiba", "A bemeneti mappa nem létezik!")
             return
 
-        self.btn_start.setEnabled(False)
-        self.btn_stop.setEnabled(True)
-        self.progress.setValue(0)
-        self.status_label.setText("Indítás…")
-        logging.getLogger("lmpx_gui").info("Dekódolás indítása")
+        # Jelszó bekérése
+        password = self.get_password()
+        if not password:
+            return
 
-        self.worker = DecryptThread(self.input_dir, self.output_dir, password)
-        self.worker.progress.connect(self.progress.setValue)
-        self.worker.status.connect(self.status_label.setText)
-        self.worker.finished.connect(self._done)
+        # UI állapot változtatása
+        self.start_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
+
+        self.log_message("Dekriptálás indítása...")
+        self.log_message(f"Bemeneti mappa: {input_dir}")
+        self.log_message(f"Kimeneti mappa: {output_dir}")
+
+        # Worker thread indítása
+        self.worker = DecryptWorker(password, input_dir, output_dir)
+        self.worker.progress_updated.connect(self.update_progress)
+        self.worker.status_updated.connect(self.update_status)
+        self.worker.finished.connect(self.decryption_finished)
         self.worker.start()
 
-    def _stop(self):
+    def stop_decryption(self):
+        """Dekriptálás leállítása"""
         if self.worker and self.worker.isRunning():
             self.worker.stop()
-            self.worker.wait()
-            logging.getLogger("lmpx_gui").info("Művelet megszakítva")
-            self.status_label.setText("Megszakítva")
-            self.btn_stop.setEnabled(False)
-            self.btn_start.setEnabled(True)
+            self.log_message("Leállítás kérve...")
 
-    def _done(self, ok: bool, msg: str):
-        logging.getLogger("lmpx_gui").info(msg)
-        self.btn_stop.setEnabled(False)
-        self.btn_start.setEnabled(True)
-        if ok:
-            self.progress.setValue(100)
-            QMessageBox.information(self, "Siker", msg)
-            self.status_label.setText("Kész")
+    def update_progress(self, value):
+        """Haladás frissítése"""
+        self.progress_bar.setValue(value)
+
+    def update_status(self, message):
+        """Állapot frissítése"""
+        self.status_label.setText(message)
+        self.log_message(message)
+
+    def decryption_finished(self, success, message):
+        """Dekriptálás befejezése"""
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+
+        if success:
+            self.progress_bar.setValue(100)
+            QMessageBox.information(self, "Siker", message)
+            self.log_message(f"SIKER: {message}")
         else:
-            QMessageBox.warning(self, "Hiba", msg)
-            self.status_label.setText("Hiba")
+            QMessageBox.critical(self, "Hiba", message)
+            self.log_message(f"HIBA: {message}")
 
-    def _open_log(self):
-        path = Path(LOG_FILE).resolve()
-        try:
-            if sys.platform == "win32":
-                os.startfile(path)
-            elif sys.platform == "darwin":
-                os.system(f"open '{path}'")
-            else:
-                os.system(f"xdg-open '{path}'")
-        except Exception:
-            QMessageBox.information(self, "Napló", f"A napló itt található: {path}")
+        self.status_label.setText("Kész")
+
+    def open_log(self):
+        """Napló fájl megnyitása"""
+        if self.log_file and os.path.exists(self.log_file):
+            try:
+                import subprocess
+                import platform
+
+                if platform.system() == "Windows":
+                    os.startfile(self.log_file)
+                elif platform.system() == "Darwin":  # macOS
+                    subprocess.run(["open", self.log_file])
+                else:  # Linux
+                    subprocess.run(["xdg-open", self.log_file])
+
+                self.log_message("Napló fájl megnyitva")
+            except Exception as e:
+                QMessageBox.warning(self, "Hiba", f"Nem sikerült megnyitni a napló fájlt: {str(e)}")
+        else:
+            QMessageBox.information(self, "Információ", "Nincs napló fájl vagy még nem létezik.")
+
 
 def main():
     app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    w = MainWindow()
-    w.show()
+
+    # Alkalmazás ikonja (ha van)
+    # app.setWindowIcon(QIcon("icon.png"))
+
+    window = LockMyPixDecryptor()
+    window.show()
+
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()
