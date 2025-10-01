@@ -3,11 +3,10 @@ import os
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QFileDialog, QLineEdit, QProgressBar, QInputDialog, QMessageBox)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 from zipfile import ZipFile
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
 
 class DecryptExtractThread(QThread):
     progress = pyqtSignal(int)
