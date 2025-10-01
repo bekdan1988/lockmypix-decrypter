@@ -10,7 +10,7 @@ jobs:
       with:
         python-version-file: 'pyproject.toml'
     - run: pip install py2app
-    - run: py2applet --make-setup lockmypix-unlocker.py --iconfile ./assets/icon.ico
+    - run: py2applet --make-setup lockmypix-unlocker.py --iconfile ./assets/icon.icns
     - run: python setup.py py2app
     - uses: actions/upload-artifact@v4
       with:
