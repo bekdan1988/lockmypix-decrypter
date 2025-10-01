@@ -12,6 +12,6 @@ jobs:
           REQUIREMENT_PATH: "requirements.txt"
           RECURSIVE: "true"
       - uses: actions/upload-artifact@master
-          with:
-            name: requirements  
-            path: ${{ github.workspace }}/requirements.txt
+        with:
+          name: requirements  
+          path: ${{ github.workspace }}/requirements.txt
