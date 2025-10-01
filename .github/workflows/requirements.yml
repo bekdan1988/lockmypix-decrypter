@@ -5,8 +5,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
-      - name: Automatic requirements.txt for Python Project
-        uses: ryan-rozario/pipreqs-action@master
+      - name: Generate Requirements
+        uses: jfheinrich-eu/pipreqs-action@v4.4.2  # Use latest stable version
+        with:
+          PROJECT_PATH: "."
+          REQUIREMENT_PATH: "requirements.txt"
+          RECURSIVE: "true"
       - uses: actions/upload-artifact@master
           with:
             name: requirements  
