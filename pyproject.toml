@@ -1,0 +1,31 @@
+[project]
+name = "LockMyPix-Unlocker"
+version = "0.1.0"
+description = "Kicsomagolja a titkosított LockMyPix fájlokat, vagy feltöri a 4, 6 és 8 számjegyű PIN kódot."
+license = "GPL-3.0-or-later"
+readme = "README.md"
+requires-python = "=3.10"
+authors = [
+    {name = "bekdan1988", email = "bekdan1988@gmail.com"},
+]
+maintainers = [
+     {name = "bekdan1988", email = "bekdan1988@gmail.com"},
+]
+keywords = ["lockmypix", "decryption", "encrypted"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: License :: OSI Approved :: GNU General Public License v3 (GPLv3)", 
+    "Natural Language :: Hungarian",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+repository = "https://github.com/bekdan1988/lukinyul-felmetszo-es-halalra-kuro-modul-lockmypix-feloldo-algoritmus/"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
