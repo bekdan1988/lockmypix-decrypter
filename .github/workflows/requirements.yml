@@ -7,6 +7,6 @@ jobs:
       - uses: actions/checkout@master
       - name: Automatic requirements.txt for Python Project
         uses: ryan-rozario/pipreqs-action@master
-      - uses: actions/upload-artifact@vmaster
+      - uses: actions/upload-artifact@master
         with:
           name: requirements   
