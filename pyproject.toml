@@ -28,7 +28,7 @@ classifiers = [
 
 [project.optional-dependencies]
 gui = ["PyQt6"]
-]
 
 [project.urls]
+
 Repository = "https://github.com/bekdan1988/lockmypix-unlocker"
