@@ -5,12 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "LockMyPix Unlocker"
 version = "0.0.1"
-requires-python = "=3.8"
+requires-python = "=3.9"
 authors = [
     {name = "bekdan1988", email = "bekdan1988@gmail.com"}
-]
-maintainers = [
-  {name = "bekdan1988", email = "bekdan1988@gmail.com"}
 ]
 description = "Unlocks 6zu files created with LockMyPix"
 readme = "README.md"
@@ -24,4 +21,5 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/bekdan1988/lockmypix-unlocker"
+
 
