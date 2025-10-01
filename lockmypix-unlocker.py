@@ -4,7 +4,6 @@ import logging
 import binascii
 import hashlib
 from pathlib import Path
-import webbrowser
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -15,11 +14,11 @@ from PyQt6.QtWidgets import (
 )
 
 # -------------------------------------------------------------
-# A LockMyPix referencia kód (decrypt.py) 3 RÉSZE VÁLTOZATLANUL:
+# A LockMyPix referencia kód (decrypt.py) 3 RÉSZE FELHASZNÁLVA:
 # - extension_map
 # - test_password
 # - write_to_output
-# Forrás: https://github.com/c-sleuth/lock-my-pix-android-decrypt/blob/main/decrypt.py
+# Forrás: c-sleuth/lock-my-pix-android-decrypt/decrypt.py
 # -------------------------------------------------------------
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
@@ -72,7 +71,7 @@ def test_password(input_dir, password):
             counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
             cipher = AES.new(key, AES.MODE_CTR, counter=counter)
             encrypted_path = os.path.join(input_dir, os.fsdecode(file))
-            with open(encrypted_path, "rb+") as enc_data:
+            with open(encrypted_path, "rb+") as enc_
                 dec_data = cipher.decrypt(enc_data.read(16))
                 header = binascii.hexlify(dec_data).decode("utf8")
                 if header.startswith("ffd8ff"):
@@ -82,7 +81,8 @@ def test_password(input_dir, password):
                     return False
     else:
         logging.warning("Cannot find a jpg file to test password")
-        # GUI-ban itt nem kérdezünk y/n-t, hanem hibával visszatérünk
+        # A referencia kódban itt interaktív y/n kérdés van; GUI-ban False-szal jelezzük,
+        # hogy a jelszót nem tudtuk ellenőrizni (nincs .6zu tesztelhető fájl).
         return False
 
 def write_to_output(output_dir, filename, dec_data):
@@ -99,7 +99,7 @@ def write_to_output(output_dir, filename, dec_data):
         f.write(dec_data)
     logging.info(f"Decrypted file {filename} written to {output_dir}")
 # -------------------------------------------------------------
-# VÉGE: referencia kód beemelt részek (változatlanul) [1]
+# VÉGE: referencia kód felhasznált részek
 # -------------------------------------------------------------
 
 LOG_FILE = "LockMyPix_decryption_log.log"
@@ -116,15 +116,13 @@ class QTextEditLogger(logging.Handler):
 def setup_logging(log_widget: QTextEdit | None = None):
     logger = logging.getLogger("lmpx_gui")
     logger.setLevel(logging.INFO)
+    logger.handlers.clear()
 
-    # File handler
-    fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
-    fh.setLevel(logging.INFO)
+    fh = logging.FileHandler(LOG_FILE, encoding="utf-8", mode="w")
     fmt = logging.Formatter('[%(levelname)s] %(asctime)s %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
     fh.setFormatter(fmt)
     logger.addHandler(fh)
 
-    # GUI handler
     if log_widget is not None:
         gui_handler = QTextEditLogger(log_widget)
         gui_handler.setFormatter(fmt)
@@ -154,20 +152,19 @@ class DecryptThread(QThread):
             self.status.emit("Jelszó ellenőrzése...")
             self.progress.emit(5)
 
-            # Jelszó teszt a referencia logika szerint (változatlan test_password) [1]
             ok = test_password(self.input_dir, self.password)
             if not ok:
                 self.finished.emit(False, "Hibás jelszó vagy nem található tesztelhető .6zu fájl.")
                 return
 
-            # Fájlok összegyűjtése
             files = [f for f in os.listdir(self.input_dir) if f.lower().endswith(".6zu")]
             total = len(files)
             if total == 0:
                 self.finished.emit(False, "A bemeneti mappában nincs .6zu fájl.")
                 return
 
-            # Feldolgozás
+            Path(self.output_dir).mkdir(parents=True, exist_ok=True)
+
             processed = 0
             self.status.emit("Dekódolás folyamatban...")
             for name in files:
@@ -179,24 +176,20 @@ class DecryptThread(QThread):
                 with open(in_path, "rb") as enc:
                     enc_data = enc.read()
 
-                # AES-CTR (kulcs és IV a referencia szerint)
                 key = hashlib.sha1(self.password.encode()).digest()[:16]
                 iv = key
                 counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
                 cipher = AES.new(key, AES.MODE_CTR, counter=counter)
                 dec_data = cipher.decrypt(enc_data)
 
-                # Kimenet írása a referencia write_to_output függvénnyel [1]
                 write_to_output(self.output_dir, name, dec_data)
 
                 processed += 1
-                # 5% → 100% skála: jelszóteszt után 5%-ról indulunk
                 pct = 5 + int(95 * (processed / total))
                 self.progress.emit(pct)
 
             self.status.emit("Kész")
             self.finished.emit(True, f"Sikeres dekódolás. {processed} fájl feldolgozva.")
-
         except Exception as e:
             logging.getLogger("lmpx_gui").exception("Hiba történt")
             self.finished.emit(False, f"Hiba történt: {e}")
@@ -204,7 +197,7 @@ class DecryptThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("6zu AES Dekódoló – Modern (mappás feldolgozás)")
+        self.setWindowTitle("6zu AES Dekódoló – Modern")
         self.setMinimumSize(800, 560)
 
         self.input_dir: str | None = None
@@ -235,15 +228,11 @@ class MainWindow(QMainWindow):
         line.setFrameShadow(QFrame.Shadow.Sunken)
         root.addWidget(line)
 
-        # Bemeneti mappa blokk
         in_group = QFrame()
-        in_group.setFrameStyle(QFrame.Shape.StyledPanel)
         ig = QVBoxLayout(in_group)
-
         lbl_in = QLabel("📁 Bemeneti mappa (.6zu fájlokkal)")
         lbl_in.setFont(QFont("", 10, QFont.Weight.Bold))
         ig.addWidget(lbl_in)
-
         ih = QHBoxLayout()
         self.in_label = QLabel("Nincs mappa kiválasztva…")
         self.in_label.setStyleSheet("color:#666; font-style:italic;")
@@ -252,18 +241,13 @@ class MainWindow(QMainWindow):
         ih.addWidget(self.in_label, 1)
         ih.addWidget(self.btn_in)
         ig.addLayout(ih)
-
         root.addWidget(in_group)
 
-        # Kimeneti mappa blokk
         out_group = QFrame()
-        out_group.setFrameStyle(QFrame.Shape.StyledPanel)
         og = QVBoxLayout(out_group)
-
         lbl_out = QLabel("📂 Kimeneti mappa (alapértelmezés: bemeneti/unlocked)")
         lbl_out.setFont(QFont("", 10, QFont.Weight.Bold))
         og.addWidget(lbl_out)
-
         oh = QHBoxLayout()
         self.out_label = QLabel("Nincs mappa kiválasztva…")
         self.out_label.setStyleSheet("color:#666; font-style:italic;")
@@ -272,10 +256,8 @@ class MainWindow(QMainWindow):
         oh.addWidget(self.out_label, 1)
         oh.addWidget(self.btn_out)
         og.addLayout(oh)
-
         root.addWidget(out_group)
 
-        # Gombok
         btns = QFrame()
         bh = QHBoxLayout(btns)
         self.btn_start = QPushButton("🚀 Indít")
@@ -292,7 +274,6 @@ class MainWindow(QMainWindow):
         bh.addWidget(self.btn_log)
         root.addWidget(btns)
 
-        # Haladás
         prog = QFrame()
         pg = QVBoxLayout(prog)
         self.status_label = QLabel("Készen áll…")
@@ -302,7 +283,6 @@ class MainWindow(QMainWindow):
         pg.addWidget(self.progress)
         root.addWidget(prog)
 
-        # Beágyazott log panel (opcionális, elrejthető)
         log_group = QFrame()
         lg = QVBoxLayout(log_group)
         ltitle = QLabel("Működési napló")
@@ -356,20 +336,14 @@ class MainWindow(QMainWindow):
         self.input_dir = path
         self.in_label.setText(path)
         self.in_label.setStyleSheet("color:#2563eb; font-weight:600;")
-
-        # Alap kimenet: input/unlocked
         default_out = os.path.join(path, "unlocked")
         self.output_dir = default_out
-        # Kiírjuk, létrehozás a tényleges indításkor történik (ha nem létezik)
         self.out_label.setText(default_out)
         self.out_label.setStyleSheet("color:#2563eb;")
-
-        # Engedjük az indítást, ha van .6zu
         has_6zu = any(f.lower().endswith(".6zu") for f in os.listdir(path))
         self.btn_start.setEnabled(has_6zu)
         if not has_6zu:
             QMessageBox.information(self, "Információ", "A mappában nem található .6zu fájl.")
-
         logging.getLogger("lmpx_gui").info(f"Bemeneti mappa: {path}")
         logging.getLogger("lmpx_gui").info(f"Alapértelmezett kimenet: {default_out}")
 
@@ -391,18 +365,67 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Figyelem", "Nincs kijelölt kimeneti mappa.")
             return
 
-        # Kimeneti unlocked mappa létrehozása, ha kell
         try:
             Path(self.output_dir).mkdir(parents=True, exist_ok=True)
         except Exception as e:
             QMessageBox.critical(self, "Hiba", f"Nem hozható létre a kimeneti mappa: {e}")
             return
 
-        # Jelszó bekérés
         password, ok = QInputDialog.getText(self, "🔑 Jelszó", "Add meg a jelszót:", QLineEdit.EchoMode.Password)
         if not ok or not password:
             return
 
-        # Indítás
         self.btn_start.setEnabled(False)
-        self.btn_stop
+        self.btn_stop.setEnabled(True)
+        self.progress.setValue(0)
+        self.status_label.setText("Indítás…")
+        logging.getLogger("lmpx_gui").info("Dekódolás indítása")
+
+        self.worker = DecryptThread(self.input_dir, self.output_dir, password)
+        self.worker.progress.connect(self.progress.setValue)
+        self.worker.status.connect(self.status_label.setText)
+        self.worker.finished.connect(self._done)
+        self.worker.start()
+
+    def _stop(self):
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait()
+            logging.getLogger("lmpx_gui").info("Művelet megszakítva")
+            self.status_label.setText("Megszakítva")
+            self.btn_stop.setEnabled(False)
+            self.btn_start.setEnabled(True)
+
+    def _done(self, ok: bool, msg: str):
+        logging.getLogger("lmpx_gui").info(msg)
+        self.btn_stop.setEnabled(False)
+        self.btn_start.setEnabled(True)
+        if ok:
+            self.progress.setValue(100)
+            QMessageBox.information(self, "Siker", msg)
+            self.status_label.setText("Kész")
+        else:
+            QMessageBox.warning(self, "Hiba", msg)
+            self.status_label.setText("Hiba")
+
+    def _open_log(self):
+        path = Path(LOG_FILE).resolve()
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                os.system(f"open '{path}'")
+            else:
+                os.system(f"xdg-open '{path}'")
+        except Exception:
+            QMessageBox.information(self, "Napló", f"A napló itt található: {path}")
+
+def main():
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    w = MainWindow()
+    w.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()
