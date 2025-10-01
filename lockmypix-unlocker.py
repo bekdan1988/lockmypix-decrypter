@@ -1,12 +1,53 @@
+import hashlib
+from Crypto.Cipher import AES
+from Crypto.Util import Counter
+import argparse
 import sys
 import os
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QFileDialog, QLineEdit, QProgressBar, QInputDialog, QMessageBox)
 from PyQt6.QtCore import QThread, pyqtSignal
-from zipfile import ZipFile
-from Crypto.Protocol.KDF import scrypt
-from Crypto.Cipher import AES
+
+# this is likely not a full list of the extensions possible
+extension_map = {
+    ".vp3": ".mp4",
+    ".vo1": ".webm",
+    ".v27": ".mpg",
+    ".vb9": ".avi",
+    ".v77": ".mov",
+    ".v78": ".wmv",
+    ".v82": ".dv",
+    ".vz9": ".divx",
+    ".vi3": ".ogv",
+    ".v1u": ".h261",
+    ".v6m": ".h264",
+    ".6zu": ".jpg",
+    ".tr7": ".gif",
+    ".p5o": ".png",
+    ".8ur": ".bmp",
+    ".33t": ".tiff",  # this extension could also be .tif
+    ".20i": ".webp",
+    ".v93": ".heic",
+    ".v91": ".flv",  # this key is linked to .flv and .eps
+    ".v80": ".3gpp",
+    ".vo4": ".ts",
+    ".v99": ".mkv",
+    ".vr2": ".mpeg",
+    ".vv3": ".dpg",
+    ".v81": ".rmvb",
+    ".vz8": ".vob",
+    ".wi2": ".asf",
+    ".vi4": ".h263",
+    ".v2u": ".f4v",
+    ".v76": ".m4v",
+    ".v75": ".ram",
+    ".v74": ".rm",
+    ".v3u": ".mts",
+    ".v92": ".dng",
+    ".r89": ".ps",
+    ".v79": ".3gp",
+}
 
 class DecryptExtractThread(QThread):
     progress = pyqtSignal(int)
@@ -23,18 +64,19 @@ class DecryptExtractThread(QThread):
 
     def run(self):
         try:
-            with open(self.infile, "rb") as f:
-                kdf_salt = f.read(16)
-                nonce = f.read(16)
-                tag = f.read(16)
-                enc_data = f.read()
-            key = scrypt(self.password.encode(), kdf_salt, 32, N=2**14, r=8, p=1)
-            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+            with open(self.infile, "rb+") as f:
+                dec_data = cipher.decrypt(f.read(16))
+                header = binascii.hexlify(dec_data).decode("utf8")
+            key = hashlib.sha1(password.encode()).digest()[:16]
+            iv = key
+            counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
+            cipher = AES.new(key, AES.MODE_CTR, counter=counter)
             try:
-                zip_data = cipher.decrypt_and_verify(enc_data, tag)
+                zip_data = cipher.decrypt_and_verify(enc_data, header)
             except ValueError:
                 self.error.emit("Hibás jelszó vagy sérült fájl!")
                 return
+                
             # Kibontás ZIP in-memory tartalomból
             import io
             zipfile = ZipFile(io.BytesIO(zip_data))
@@ -110,7 +152,7 @@ class ModernApp(QWidget):
 
     def pick_file(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Válassz .6zu AES fájlt", "", "6zu Files (*.6zu)"
+            self, "Válassz ki egy .6zu fájlt", "", "6zu Files (*.6zu)"
         )
         if path:
             self.file_path = path
