@@ -71,7 +71,7 @@ def test_password(input_dir, password):
             counter = Counter.new(128, initial_value=int.from_bytes(iv, "big"))
             cipher = AES.new(key, AES.MODE_CTR, counter=counter)
             encrypted_path = os.path.join(input_dir, os.fsdecode(file))
-            with open(encrypted_path, "rb+") as enc_
+            with open(encrypted_path, "rb+") as enc_data:
                 dec_data = cipher.decrypt(enc_data.read(16))
                 header = binascii.hexlify(dec_data).decode("utf8")
                 if header.startswith("ffd8ff"):
