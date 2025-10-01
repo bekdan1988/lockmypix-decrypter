@@ -10,5 +10,5 @@ jobs:
 
         with:
           PROJECT_PATH: ./
-          REQUIREMENT_PATH: ./requirements.txt
+          REQUIREMENT_PATH: {{ github.workspace }}/requirements.txt
           COMMIT_MESSAGE: "Updated requirements file"
