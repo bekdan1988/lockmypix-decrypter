@@ -9,7 +9,7 @@ jobs:
     - uses: actions/setup-python@master
     - run: pip install pyinstaller  
     - run: pip install pycryptodome
-    - run: pyi-makespec --onefile --windowed --noconsole --icon ./assets/icon.icns --name lockmypix-unlocker lockmypix-unlocker.py
+    - run: pyi-makespec --onefile --windowed --noconsole --icon ./assets/icon.ico --name lockmypix-unlocker lockmypix-unlocker.py
     - run: pyinstaller lockmypix-unlocker.spec
     - uses: actions/upload-artifact@v4
       with:
