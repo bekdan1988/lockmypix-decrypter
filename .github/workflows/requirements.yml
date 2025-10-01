@@ -9,5 +9,5 @@ jobs:
         uses: ryan-rozario/pipreqs-action@master
       - uses: actions/upload-artifact@master
           with:
-            name: requirements
-            path: ./dist/requirements.txt
+            name: requirements  
+            path: ${{ github.workspace }}/requirements.txt
