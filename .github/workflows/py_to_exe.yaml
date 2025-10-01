@@ -9,7 +9,7 @@ jobs:
     - uses: actions/setup-python@v6
     - run: pip install pyinstaller  
     - run: pip install pycryptodomex
-    - run: pyi-makespec --onefile --windowed --noconsole --icon ./assets/icon.svg --name decrypt decrypt.py
+    - run: pyi-makespec --onefile --windowed --noconsole --icon ./assets/icon.ico --name decrypt decrypt.py
     - run: pyinstaller decrypt.spec
     - uses: actions/upload-artifact@v4
       with:
