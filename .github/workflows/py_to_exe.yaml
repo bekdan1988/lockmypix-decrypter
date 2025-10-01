@@ -7,6 +7,8 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - uses: actions/setup-python@v6
+      with:
+        python-version-file: 'pyproject.toml'
     - run: pip install pyinstaller  
     - run: pip install pycryptodomex
     - run: pyi-makespec --onefile --windowed --noconsole --icon ./assets/icon.ico --name decrypt decrypt.py
