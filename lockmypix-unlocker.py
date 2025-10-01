@@ -8,16 +8,16 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QFileDialog, QLineEdit, QProgressBar, QInputDialog, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl
+from PyQt6.QtGui import QDesktopServices
 
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Cipher import AES
 
 # ---------------------------
 # extension_map + felismerés
+# (LockMyPix decrypt.py mintája alapján)
 # ---------------------------
-# A kiterjesztés-hozzárendelés a dekódolt bájtok "magic" fejlécéből történik,
-# a gyakori formátumok lefedésével (LockMyPix decrypt.py elv alapján).
 extension_map = {
     b"\x89PNG\r\n\x1a\n": ".png",
     b"\xff\xd8\xff": ".jpg",
@@ -25,19 +25,33 @@ extension_map = {
     b"GIF89a": ".gif",
     b"%PDF": ".pdf",
     b"\x50\x4B\x03\x04": ".zip",
+    b"\x50\x4B\x05\x06": ".zip",
+    b"\x50\x4B\x07\x08": ".zip",
     b"BM": ".bmp",
     b"OggS": ".ogg",
-    b"RIFF": ".riff",  # majd finomítjuk WEBP/WAV szerint
-    b"\x1A\x45\xDF\xA3": ".mkv",  # Matroska
     b"ID3": ".mp3",
+    b"fLaC": ".flac",
+    b"\x1A\x45\xDF\xA3": ".mkv",
+    b"RIFF": ".riff",  # finomítás lent (WEBP/WAVE)
+    b"\x00\x00\x00\x18ftyp": ".mp4",  # egyes MP4 variánsok
+    b"ftyp": ".mp4",  # általános MP4 jelölés (ellenőrzés lent)
+    b"II*\x00": ".tif",
+    b"MM\x00*": ".tif",
+    b"\x25\x21\x50\x53": ".ps",
+    b"\x00\x00\x01\x00": ".ico",
+    b"PK\x03\x04": ".zip",
+    b"\x52\x61\x72\x21\x1A\x07\x00": ".rar",
+    b"7z\xBC\xAF\x27\x1C": ".7z",
+    b"\x00\x00\x00\x0cJPG": ".jpg",
+    b"webm": ".webm",
 }
 
 def guess_extension(first_bytes: bytes) -> str:
-    # Speciális vizsgálatok
+    # MP4/QuickTime család (ftyp jelölés)
     if len(first_bytes) >= 12 and first_bytes[4:8] == b"ftyp":
         return ".mp4"
+    # RIFF finomítás: WEBP vs WAV
     if first_bytes.startswith(b"RIFF"):
-        # WEBP vs WAV
         if len(first_bytes) >= 12 and first_bytes[8:12] == b"WEBP":
             return ".webp"
         if len(first_bytes) >= 12 and first_bytes[8:12] == b"WAVE":
@@ -53,7 +67,7 @@ def guess_extension(first_bytes: bytes) -> str:
 # ---------------------------
 # write_to_output
 # ---------------------------
-def write_to_output(out_dir: str, base_name: str, temp_path: str, ext: str) -> str:
+def write_to_output(out_dir: str, base_name: str, temp_path: str, ext: str, log: logging.Logger) -> str:
     """
     Temp fájl átnevezése ütközéskezeléssel, a kiterjesztés hozzárendelésével.
     """
@@ -61,24 +75,26 @@ def write_to_output(out_dir: str, base_name: str, temp_path: str, ext: str) -> s
     target = os.path.join(out_dir, base_name + ext)
     if not os.path.exists(target):
         os.replace(temp_path, target)
+        log.info(f"write_to_output: véglegesítve {target}")
         return target
-    # Ütközés esetén sorszámozás
     i = 1
     while True:
         candidate = os.path.join(out_dir, f"{base_name}_{i}{ext}")
         if not os.path.exists(candidate):
             os.replace(temp_path, candidate)
+            log.info(f"write_to_output: ütközés miatt {candidate} néven mentve")
             return candidate
         i += 1
 
 # ---------------------------
 # test_password
 # ---------------------------
-def test_password(infile: str, password: str, log: logging.Logger) -> Tuple[bool, Optional[bytes]]:
+def test_password(infile: str, password: str, log: logging.Logger) -> Tuple[bool, Optional[bytes], Optional[bytes]]:
     """
-    Jelszó ellenőrzése: teljes visszafejtés memóriába és tag ellenőrzés.
-    Siker esetén visszaadja a dekódolt bájtokat, különben (False, None).
-    A fejléckiosztás: 32B salt, 12B nonce, 16B tag, utána ciphertext (LockMyPix minta).
+    Jelszó ellenőrzése és teljes visszafejtés memóriába a tag verifikációval.
+    Fejléckiosztás (LockMyPix minta):
+      32B salt, 12B nonce, 16B tag, utána ciphertext.
+    Visszaad: (ok, plaintext, first64bytes) hibánál (False, None, None).
     """
     try:
         with open(infile, "rb") as f:
@@ -89,11 +105,12 @@ def test_password(infile: str, password: str, log: logging.Logger) -> Tuple[bool
         key = scrypt(password.encode("utf-8"), salt, 32, N=2**18, r=8, p=1)
         cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
         plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+        first = plaintext[:64]
         log.info("test_password: sikeres tag verifikáció")
-        return True, plaintext
+        return True, plaintext, first
     except Exception as e:
         log.error(f"test_password: hiba vagy rossz jelszó: {e}")
-        return False, None
+        return False, None, None
 
 # ---------------------------
 # Dekódoló munkaszál
@@ -110,6 +127,7 @@ class DecryptWorker(QThread):
         self.outdir = outdir
         self.password = password
         self._running = True
+
         # Logger beállítás
         self.logger = logging.getLogger(f"decrypt_logger_{id(self)}")
         self.logger.setLevel(logging.INFO)
@@ -125,20 +143,19 @@ class DecryptWorker(QThread):
     def run(self):
         try:
             self.logger.info(f"Indítás: infile={self.infile}, outdir={self.outdir}")
-            ok, plaintext = test_password(self.infile, self.password, self.logger)
-            if not ok or plaintext is None:
+            ok, plaintext, first = test_password(self.infile, self.password, self.logger)
+            if not ok or plaintext is None or first is None:
                 self.error.emit("Hibás jelszó vagy sérült fájl!")
                 return
 
-            # Kimeneti temp fájl írása chunkokban, hogy legyen progress és megszakíthatóság
             base_name = os.path.splitext(os.path.basename(self.infile))[0]
             temp_path = os.path.join(self.outdir, base_name + ".partial")
+
             total = len(plaintext)
             written = 0
-            first_bytes = plaintext[:64]
+            chunk_size = 64 * 1024
 
             with open(temp_path, "wb") as out:
-                chunk_size = 64 * 1024
                 stream = io.BytesIO(plaintext)
                 while self._running:
                     chunk = stream.read(chunk_size)
@@ -149,18 +166,17 @@ class DecryptWorker(QThread):
                     self.progress.emit(int(written / max(1, total) * 100))
 
             if not self._running:
-                # Megszakítás – takarítás
-                try:
-                    if os.path.exists(temp_path):
+                if os.path.exists(temp_path):
+                    try:
                         os.remove(temp_path)
-                finally:
-                    self.logger.info("Művelet megszakítva a felhasználó által")
-                    self.stopped.emit()
-                    return
+                    except Exception:
+                        pass
+                self.logger.info("Művelet megszakítva a felhasználó által")
+                self.stopped.emit()
+                return
 
-            # Kiterjesztés meghatározása és véglegesítés
-            ext = guess_extension(first_bytes)
-            final_path = write_to_output(self.outdir, base_name, temp_path, ext)
+            ext = guess_extension(first)
+            final_path = write_to_output(self.outdir, base_name, temp_path, ext, self.logger)
             self.logger.info(f"Sikeres dekódolás: {final_path}")
             self.finished.emit(f"Sikeres dekódolás: {os.path.basename(final_path)}")
         except Exception as e:
@@ -196,7 +212,7 @@ class ModernApp(QWidget):
         self.file_path = ""
         self.output_dir = ""
         self.worker: Optional[DecryptWorker] = None
-        self.log_path = ""  # futáskor kerül beállításra
+        self.log_path = ""
 
         self.setup_ui()
 
@@ -235,8 +251,12 @@ class ModernApp(QWidget):
         self.stop_btn = QPushButton("Leállít")
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop_decrypt)
+        self.log_btn = QPushButton("Log megnyitása")
+        self.log_btn.setEnabled(False)
+        self.log_btn.clicked.connect(self.open_log)
         row3.addWidget(self.start_btn)
         row3.addWidget(self.stop_btn)
+        row3.addWidget(self.log_btn)
         layout.addLayout(row3)
 
         # Üzenetek
@@ -250,10 +270,11 @@ class ModernApp(QWidget):
         if path:
             self.file_path = path
             self.input_edit.setText(path)
-            # Alapértelmezett kimeneti mappa a bemeneti mappa
             out_dir = os.path.dirname(path)
             self.output_dir = out_dir
             self.output_edit.setText(out_dir)
+            self.log_path = os.path.join(self.output_dir, "6zu_decrypt.log")
+            self.log_btn.setEnabled(os.path.isfile(self.log_path))
 
     def pick_output(self):
         dir_path = QFileDialog.getExistingDirectory(
@@ -263,6 +284,8 @@ class ModernApp(QWidget):
         if dir_path:
             self.output_dir = dir_path
             self.output_edit.setText(dir_path)
+            self.log_path = os.path.join(self.output_dir, "6zu_decrypt.log")
+            self.log_btn.setEnabled(os.path.isfile(self.log_path))
 
     def start_decrypt(self):
         if not self.file_path or not self.file_path.endswith(".6zu"):
@@ -272,7 +295,6 @@ class ModernApp(QWidget):
             QMessageBox.warning(self, "Hiba", "Válassz kimeneti mappát!")
             return
 
-        # Jelszó bekérése
         passwd, ok = QInputDialog.getText(
             self, "Jelszó szükséges",
             "Add meg a titkosításhoz használt jelszót:",
@@ -281,16 +303,15 @@ class ModernApp(QWidget):
         if not ok or not passwd:
             return
 
-        # Logfájl
+        # Logfájl útvonal
         self.log_path = os.path.join(self.output_dir, "6zu_decrypt.log")
 
-        # Állapot
         self.progress_bar.setValue(0)
         self.status_label.setText("Dekódolás folyamatban...")
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.log_btn.setEnabled(True)
 
-        # Munkaszál indítása
         self.worker = DecryptWorker(self.file_path, self.output_dir, passwd, self.log_path)
         self.worker.progress.connect(self.progress_bar.setValue)
         self.worker.finished.connect(self.on_finished)
@@ -303,6 +324,12 @@ class ModernApp(QWidget):
             self.worker.stop()
             self.stop_btn.setEnabled(False)
             self.status_label.setText("Leállítás folyamatban...")
+
+    def open_log(self):
+        if self.log_path and os.path.isfile(self.log_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self.log_path))
+        else:
+            QMessageBox.information(self, "Log", "Még nincs logfájl létrehozva.")
 
     def on_finished(self, msg: str):
         self.status_label.setText(msg)
@@ -324,6 +351,6 @@ class ModernApp(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     w = ModernApp()
-    w.resize(720, 240)
+    w.resize(760, 260)
     w.show()
     sys.exit(app.exec())
