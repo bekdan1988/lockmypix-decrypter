@@ -1,5 +1,19 @@
 import sys
 import os
+from PyQt6.QtWidgets import (
+    QApplication,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout, 
+    QPushButton, 
+    QLabel,
+    QFileDialog,
+    QLineEdit,
+    QProgressBar,
+    QInputDialog,
+    QMessageBox
+)
+
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QLineEdit, QProgressBar, QInputDialog, QMessageBox)
 from PyQt6.QtCore import QThread, pyqtSignal
 
