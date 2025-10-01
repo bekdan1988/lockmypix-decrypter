@@ -7,8 +7,6 @@ jobs:
       - uses: actions/checkout@master
       - name: Automatic requirements.txt for Python Project
         uses: ryan-rozario/pipreqs-action@master
-
-        # Put an example of mandatory inputs here
+      - uses: actions/upload-artifact@v4
         with:
-          PROJECT_PATH: project_folder   #default is the root of the repository
-          REQUIREMENT_PATH: project_folder/requirements.txt  #default is requirement.txt in the root of your repository 
+          name: lockmypics-unlocker    
