@@ -1,0 +1,17 @@
+name: Py to app
+on: push
+  
+jobs:     
+  run:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions/setup-python@master
+    - run: pip install pyinstaller  
+    - run: pip install pycryptodome
+    - run: pyi-makespec --onefile --windowed --noconsole --icon ./assets/icon.icns --name lockmypix-unlocker lockmypix-unlocker.py
+    - run: pyinstaller lockmypix-unlocker.spec
+    - uses: actions/upload-artifact@v4
+      with:
+        name: lockmypics-unlocker    
+        path: ${{ github.workspace }}
