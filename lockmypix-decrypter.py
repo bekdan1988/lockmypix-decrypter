@@ -658,7 +658,7 @@ class LockMyPixDecrypter(QMainWindow):
         """
             QLabel#appTitle {
                 color: #ffffff;
-                font-size: 22px;
+                font-size: 28px;
                 font-weight: bold;
                 margin-bottom: 15px;
             }
