@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-LockMyPix Decrypter - Multilingual version (Top-right language selector)
-Titkosított .6zu fájlok dekriptálására szolgáló alkalmazás
-"""
-
 import sys
 import os
 import hashlib
@@ -34,8 +29,8 @@ class LanguageManager:
         self.texts = {
             "hu": {
                 # Főablak
-                "window_title": "LockMyPix Dekriptor",
-                "app_title": "🔓 LockMyPix Dekriptor",
+                "window_title": "LockMyPix Decrypter",
+                "app_title": "🔓 LockMyPix Decrypter",
 
                 # Csoportok
                 "folders_group": "📁 Mappák",
@@ -298,7 +293,7 @@ class DecryptWorker(QThread):
             self.finished.emit(False, error_msg)
 
 
-class LockMyPixDecryptor(QMainWindow):
+class LockMyPixDecrypter(QMainWindow):
     """Fő alkalmazás ablak"""
 
     def __init__(self):
@@ -700,7 +695,7 @@ class LockMyPixDecryptor(QMainWindow):
 def main():
     """Főprogram"""
     app = QApplication(sys.argv)
-    window = LockMyPixDecryptor()
+    window = LockMyPixDecrypter()
     window.show()
     sys.exit(app.exec())
 
