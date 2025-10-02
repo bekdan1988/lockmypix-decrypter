@@ -329,7 +329,7 @@ class LockMyPixDecrypter(QMainWindow):
 
         # Cím
         self.title = QLabel(self.lang.get_text("app_title"))
-        self.title.setFont(QFont("Arial", 28, QFont.Weight.Bold))
+        self.title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
         self.title.setStyleSheet("color: #ffffff; margin-bottom: 15px;")
         header_layout.addWidget(self.title)
 
@@ -678,7 +678,7 @@ class LockMyPixDecrypter(QMainWindow):
                 left: 10px;
                 padding: 0 5px 0 5px;
                 color: #ffffff;
-                font-size: 28px;
+                font-size: 20px;
             }
 
             QLineEdit {
