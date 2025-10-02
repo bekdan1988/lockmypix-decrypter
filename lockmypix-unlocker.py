@@ -92,9 +92,9 @@ class DecryptWorker(QThread):
                 self.status_updated.emit(f"Kimeneti mappa létrehozva: {self.output_dir}")
 
             # Fájlok listázása
-            files = [f for f in os.listdir(self.input_dir) if os.path.isfile(os.path.join(self.input_dir, f))]
+            files = [f for f in os.listdir(self.input_dir) if os.path.isfile(os.path.join(self.input_dir, f)) and f.endswith('.6zu')]
             total_files = len(files)
-
+     
             if total_files == 0:
                 self.finished.emit(False, "Nincsenek feldolgozható fájlok a bemeneti mappában!")
                 return
