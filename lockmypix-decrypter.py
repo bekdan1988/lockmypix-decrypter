@@ -329,7 +329,7 @@ class LockMyPixDecrypter(QMainWindow):
 
         # Cím
         self.title = QLabel(self.lang.get_text("app_title"))
-        self.title.setFont(QFont("Arial", 22, QFont.Weight.Bold))
+        self.title.setFont(QFont("Arial", 28, QFont.Weight.Bold))
         self.title.setStyleSheet("color: #ffffff; margin-bottom: 15px;")
         header_layout.addWidget(self.title)
 
@@ -341,34 +341,46 @@ class LockMyPixDecrypter(QMainWindow):
         self.language_combo.addItem("Magyar", "hu")
         self.language_combo.addItem("English", "en")
         self.language_combo.currentIndexChanged.connect(self.language_changed)
-        self.language_combo.setMaximumWidth(120)
+        self.language_combo.setMaximumWidth(150)
         self.language_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #4a4a4a;
-                color: #ffffff;
-                border: 2px solid #555555;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 12px;
-                font-weight: bold;
-                min-height: 35px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 4px solid #ffffff;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #4a4a4a;
-                color: #ffffff;
-                border: 1px solid #555555;
-                selection-background-color: #0078d4;
-            }
-        """)
+QComboBox {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 #5a7ebf,
+        stop: 0.5 #4a6ea9,
+        stop: 1 #3a5e99
+    );
+    color: #ffffff;
+    border: 2px solid #2a4e89;
+    border-radius: 8px;
+    padding: 8px 32px 8px 12px; /* extra right padding for arrow */
+    font-size: 14px;
+    font-weight: bold;
+    min-height: 40px;
+    min-width: 150px;
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 24px;
+    border-left: 1px solid #3a5e99;
+}
+QComboBox::down-arrow {
+    image: none; /* hide default */
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #ffffff;
+}
+QComboBox QAbstractItemView {
+    background-color: #4a4a4a;
+    color: #ffffff;
+    border: 1px solid #555555;
+    selection-background-color: #0078d4;
+    padding: 4px;
+}
+""")
         header_layout.addWidget(self.language_combo)
 
         main_layout.addLayout(header_layout)
