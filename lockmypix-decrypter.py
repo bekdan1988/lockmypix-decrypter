@@ -173,7 +173,7 @@ class LockMyPixDecryptor(QMainWindow):
 
     def init_ui(self):
         """UI inicializálása"""
-        self.setWindowTitle("LockMyPix dekriptor")
+        self.setWindowTitle("LockMyPix Decrypter")
         self.setGeometry(300, 300, 700, 500)
         self.setStyleSheet(self.get_style())
 
@@ -185,7 +185,7 @@ class LockMyPixDecryptor(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
 
         # Cím
-        title = QLabel("🔓 LockMyPix dekriptor")
+        title = QLabel("🔓 LockMyPix Decrypter")
         title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color: #ffffff; margin-bottom: 15px;")
