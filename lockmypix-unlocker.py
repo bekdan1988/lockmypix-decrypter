@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-LockMyPix Dekriptor - Letisztult verzió
-Titkosított .6zu fájlok dekriptálására szolgáló alkalmazás
-"""
 
 import sys
 import os
