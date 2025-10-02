@@ -1,2 +1,2 @@
-# LockMyPix Unlocker
-Unlocks 6zu files created with LockMyPix 
+# LockMyPix Decrypter
+Unlocks 6zu files created with LockMyPix
