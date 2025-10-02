@@ -329,7 +329,7 @@ class LockMyPixDecrypter(QMainWindow):
 
         # Cím
         self.title = QLabel(self.lang.get_text("app_title"))
-        self.title.setFont(QFont("Arial", 28, QFont.Weight.Bold))
+        self.title.setFont(QFont("Arial", 40, QFont.Weight.Bold))
         self.title.setStyleSheet("color: #ffffff; margin-bottom: 15px;")
         header_layout.addWidget(self.title)
 
@@ -341,7 +341,7 @@ class LockMyPixDecrypter(QMainWindow):
         self.language_combo.addItem("Magyar", "hu")
         self.language_combo.addItem("English", "en")
         self.language_combo.currentIndexChanged.connect(self.language_changed)
-        self.language_combo.setMaximumWidth(150)
+        self.language_combo.setMaximumWidth(75)
         self.language_combo.setStyleSheet("""
             QComboBox {
                 background: qlineargradient(
@@ -356,8 +356,8 @@ class LockMyPixDecrypter(QMainWindow):
                 padding: 8px 32px 8px 12px; /* extra right padding for arrow */
                 font-size: 14px;
                 font-weight: bold;
-                min-height: 40px;
-                min-width: 150px;
+                min-height: 20px;
+                min-width: 75px;
             }
             QComboBox::drop-down {
                 subcontrol-origin: padding;
@@ -377,7 +377,7 @@ class LockMyPixDecrypter(QMainWindow):
                 background-color: #4a4a4a;
                 color: #ffffff;
                 border: 1px solid #555555;
-                selection-background-color: #0078d4;
+                selection-background-color: #f1c232;
                 padding: 4px;
             }
         """)
