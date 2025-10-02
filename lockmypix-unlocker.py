@@ -531,7 +531,7 @@ def main():
     app = QApplication(sys.argv)
 
     # Alkalmazás ikonja (ha van)
-    # app.setWindowIcon(QIcon("icon.png"))
+    app.setWindowIcon(QIcon("/assets/icon.ico"))
 
     window = LockMyPixDecryptor()
     window.show()
