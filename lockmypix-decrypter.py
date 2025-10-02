@@ -678,7 +678,7 @@ class LockMyPixDecrypter(QMainWindow):
                 left: 10px;
                 padding: 0 5px 0 5px;
                 color: #ffffff;
-                font-size: 14px;
+                font-size: 28px;
             }
 
             QLineEdit {
