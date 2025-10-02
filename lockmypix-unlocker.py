@@ -173,7 +173,7 @@ class LockMyPixDecryptor(QMainWindow):
 
     def init_ui(self):
         """UI inicializálása"""
-        self.setWindowTitle("LockMyPix Dekriptor")
+        self.setWindowTitle("LockMyPix dekriptor")
         self.setGeometry(300, 300, 700, 500)
         self.setStyleSheet(self.get_style())
 
@@ -185,7 +185,7 @@ class LockMyPixDecryptor(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
 
         # Cím
-        title = QLabel("🔓 LockMyPix Dekriptor")
+        title = QLabel("🔓 LockMyPix dekriptor")
         title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color: #ffffff; margin-bottom: 15px;")
@@ -361,7 +361,7 @@ class LockMyPixDecryptor(QMainWindow):
         if folder:
             self.input_path.setText(folder)
             # Automatikus kimeneti mappa
-            self.output_path.setText(os.path.join(folder, "unlocked"))
+            self.output_path.setText(os.path.join(folder, "decrypted"))
             self.log_message(f"Bemenet: {folder}")
 
     def browse_output(self):
