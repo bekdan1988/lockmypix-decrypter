@@ -1,0 +1,10 @@
+Set-ExecutionPolicy RemoteSigned
+
+
+py -m venv .venv
+
+./.venv/Scripts/Activate.ps1
+
+cd C:\Users\solol\.venv
+
+pyinstaller --windowed --icon  C:\Users\solol\pyth\lockmypix-decrypter\icon.png --noconsole  --onefile  `C:\Users\solol\pyth\lockmypix-decrypter\lockmypix-decrypter.py
