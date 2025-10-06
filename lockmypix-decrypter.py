@@ -11,11 +11,12 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 import logging
+from PySide6 import QtQml
 
 from PyQt6.QtWidgets import (
-    QApplication, QSplashScreen, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFileDialog, QTextEdit, QProgressBar,
-    QLineEdit, QMessageBox, QGroupBox, QInputDialog, QComboBox
+    QLineEdit, QMessageBox, QGroupBox, QInputDialog, QComboBox, QSplashScreen
 )
 
 from PyQt6 import QtGui
@@ -788,7 +789,7 @@ class LockMyPixDecrypter(QMainWindow):
         self.lang = LanguageManager()
         self.setup_logging()
         self.init_ui()
-
+        
     def setup_logging(self):
         """Naplózás beállítása"""
         log_dir = Path("logs")
@@ -810,7 +811,7 @@ class LockMyPixDecrypter(QMainWindow):
         self.setWindowTitle(self.lang.get_text("window_title"))
         self.setGeometry(300, 300, 750, 550)
         self.setStyleSheet(self.get_style())
-
+        
         # Központi widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -1606,15 +1607,15 @@ class LockMyPixDecrypter(QMainWindow):
 def main():
     """Főprogram"""
     app = QApplication(sys.argv)
-    app.setWindowIcon(QtGui.QIcon(":/icon.ico"))
-    pixmap = QPixmap(":/splash.jpeg")
+    pixmap = QPixmap("resources/images/splash.jpeg")
     splash = QSplashScreen(pixmap)
     splash.show()
-    QApplication::processEvents()
-window = LockMyPixDecrypter()
-window.show()
-splash.finish(window)
-sys.exit(app.exec())
+    app.processEvents()
+    app.setWindowIcon(QtGui.QIcon(":/icons/appico.ico"))
+    window = LockMyPixDecrypter()
+    window.show()
+    splash.finish(window)
+    sys.exit(app.exec())
     
 if __name__ == "__main__":
     main()
