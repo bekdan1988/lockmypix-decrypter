@@ -1,3 +1,3 @@
 # LockMyPix Decrypter
 
-Decrypt and unpack LockMyPix .zip.cmpexport files.
+Decrypts and unpacks LockMyPix *.zip.cmpexport files.
