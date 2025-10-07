@@ -1,2 +1,0 @@
-PyQt6>=6.0.0
-pycryptodome>=3.15.0
