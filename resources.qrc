@@ -1,7 +1,0 @@
-<RCC>
-    <qresource prefix="./">
-        <file>resource/images/appico.ico</file>
-        <file>resource/images/appico.icns</file>
-        <file>resource/images/splash.jpeg</file>
-    </qresource>
-</RCC>
