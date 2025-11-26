@@ -4,8 +4,4 @@ Decrypts and unpacks .zip.cmexport files created with LockMyPix
 
 Sponsore:
 
-![Termius logo](https://termius.com/brand-resources/logo.svg)
-
-# termius
-
-[Termius](https://termius.com) egy biztonságos, megbízható és együttműködő SSH kliens.
+[![Termius](https://img.shields.io/badge/Termius-SSH%20Client-222E3C?logo=termius&logoColor=white&labelColor=222E3C&color=369BFF&style=for-the-badge)](https://termius.com)
